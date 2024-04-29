@@ -4,9 +4,9 @@
 # - ubuntu 18.04 -> 20.04
 # - qemu 5.0.0 -> 7.0.0
 # - Extensive comments linking to relevant documentation
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
-ARG QEMU_VERSION=7.0.0
+ARG QEMU_VERSION=8.2.0
 ARG HOME=/root
 
 # 0. Install general tools
