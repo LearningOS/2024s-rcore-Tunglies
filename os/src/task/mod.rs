@@ -14,8 +14,11 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::{MAX_SYSCALL_NUM, PAGE_SIZE};
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{frame_alloc, frame_dealloc, MapPermission, PTEFlags, VirtAddr, VirtPageNum};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -79,6 +82,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
+        next_task.start_time = get_time_ms();
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -140,6 +144,7 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            inner.tasks[next].start_time = get_time_ms();
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -153,8 +158,95 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
-}
 
+    ///
+    fn current_task_mmap(&self, start: usize, num_pages: usize, pteflags: PTEFlags) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        for i in 0..num_pages {
+            let page_start = start + i * PAGE_SIZE;
+            if (inner.tasks[current].memory_set.page_table).translate(VirtAddr(page_start).ceil()).is_some() {
+                debug!("Mapped, {:?}", page_start);
+                return -1;
+            }
+
+            let frame = match frame_alloc() {
+                Some(f) => f,
+                None => return -1
+            };
+
+            (inner.tasks[current].memory_set.page_table).map(VirtPageNum::from(page_start / PAGE_SIZE), frame.ppn,  pteflags);
+        }
+        0
+    }
+
+    ///
+    fn current_task_unmap(&self, start: usize, num_pages: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        for i in 0..num_pages {
+            let page_start = start + i * PAGE_SIZE;
+            if (inner.tasks[current].memory_set.page_table).translate(VirtAddr(page_start).into()).is_none() {
+                return -1;
+            }
+            
+            frame_dealloc(inner.tasks[current].memory_set.page_table.root_ppn);
+
+            (inner.tasks[current].memory_set.page_table).unmap(VirtPageNum::from(page_start / PAGE_SIZE));
+        }
+        0
+    }
+    /// Check Task is Mapped
+    pub fn is_mapped(&self, start_va: VirtAddr, end_va: VirtAddr, mapped: bool) -> bool {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.is_mapped(start_va, end_va, mapped)
+    }
+    /// Current task mmap
+    pub fn current_mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permissions: MapPermission) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, permissions);
+
+    }
+    /// Current task unmmap
+    pub fn current_unmap(&self, start_va: VirtAddr, end_va: VirtAddr) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.remove_framed_area(start_va, end_va);
+    }
+    /// Current task status
+    pub fn current_task_status(&self) -> TaskStatus {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let status = inner.tasks[current].task_status;
+        drop(inner);
+        status
+    }
+    /// Current task sysccall
+    pub fn current_task_syscalls(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let syscalls = inner.tasks[current].syscalls;
+        drop(inner);
+        syscalls
+    }
+    /// Current task syscalls increase
+    pub fn current_task_syscalls_increase(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscalls[syscall_id] += 1;
+        drop(inner);
+    }
+    /// Current task cost time
+    pub fn current_task_cost_time(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let time = get_time_ms() - inner.tasks[current].start_time;
+        drop(inner);
+        time
+    }
+}
 /// Run the first task in task list.
 pub fn run_first_task() {
     TASK_MANAGER.run_first_task();
@@ -201,4 +293,49 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// test
+pub fn current_task_mmap(start: usize, num_pages: usize, pteflags: PTEFlags) -> isize {
+    TASK_MANAGER.current_task_mmap(start, num_pages, pteflags)
+}
+
+/// test
+pub fn current_task_unmap(start: usize, num_pages: usize) -> isize {
+    TASK_MANAGER.current_task_unmap(start, num_pages)
+}
+
+/// Check if mapped
+pub fn current_is_mapped(start_va: VirtAddr, end_va:VirtAddr, mapped: bool) -> bool {
+    TASK_MANAGER.is_mapped(start_va, end_va, mapped)
+}
+
+/// Current mmap
+pub fn current_mmp(start_va: VirtAddr, end_va: VirtAddr, permissions: MapPermission) {
+    TASK_MANAGER.current_mmap(start_va, end_va, permissions);
+}
+
+/// Current unmap
+pub fn current_unmap(start_va: VirtAddr, end_va: VirtAddr) {
+    TASK_MANAGER.current_unmap(start_va, end_va);
+}
+
+/// Current task status
+pub fn current_task_status() -> TaskStatus {
+    TASK_MANAGER.current_task_status()
+}
+
+/// Current task syscalls
+pub fn current_task_syscalls() -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.current_task_syscalls()
+}
+
+/// Current task sysccalls increase
+pub fn current_task_syscalls_increase(syscall_id: usize) {
+    TASK_MANAGER.current_task_syscalls_increase(syscall_id);
+}
+
+/// Current task cost time
+pub fn current_task_cost_time() -> usize {
+    TASK_MANAGER.current_task_cost_time()
 }

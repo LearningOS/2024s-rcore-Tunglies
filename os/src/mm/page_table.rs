@@ -66,8 +66,10 @@ impl PageTableEntry {
 
 /// page table structure
 pub struct PageTable {
-    root_ppn: PhysPageNum,
-    frames: Vec<FrameTracker>,
+    ///
+    pub root_ppn: PhysPageNum,
+    ///
+    pub frames: Vec<FrameTracker>,
 }
 
 /// Assume that it won't oom when creating/mapping.

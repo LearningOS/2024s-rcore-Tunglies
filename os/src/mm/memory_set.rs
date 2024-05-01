@@ -35,8 +35,10 @@ lazy_static! {
 }
 /// address space
 pub struct MemorySet {
-    page_table: PageTable,
-    areas: Vec<MapArea>,
+    ///
+    pub page_table: PageTable,
+    ///
+    pub areas: Vec<MapArea>,
 }
 
 impl MemorySet {
@@ -47,6 +49,20 @@ impl MemorySet {
             areas: Vec::new(),
         }
     }
+
+    /// Check VPN is Mapped
+    pub fn is_mapped(&self, start_va: VirtAddr, end_va: VirtAddr, mapped: bool) -> bool {
+        let vpn_range = VPNRange::new(start_va.floor(), end_va.ceil());
+
+        vpn_range.into_iter().all(|vpn| {
+            if let Some(pte) = self.translate(vpn) {
+                pte.is_valid() == mapped
+            } else {
+                true
+        }
+        })
+    }
+
     /// Get the page table token
     pub fn token(&self) -> usize {
         self.page_table.token()
@@ -58,10 +74,15 @@ impl MemorySet {
         end_va: VirtAddr,
         permission: MapPermission,
     ) {
+        debug!("insert framed area");
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+    }
+    /// Remove that no conflicts.
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) {
+        MapArea::new(start_va, end_va, MapType::Framed, MapPermission::U).unmap(&mut self.page_table);
     }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
