@@ -7,6 +7,7 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -90,6 +91,29 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
     task.get_user_token()
+}
+
+/// check current task mapped
+pub fn current_task_is_mapped(start_va: VirtAddr, end_va: VirtAddr, mapped: bool) -> bool {
+    let task = current_task().unwrap();
+    task.is_mapped(start_va, end_va, mapped)
+}
+
+/// current task mmap
+pub fn current_task_mmap(start_va: VirtAddr, end_va: VirtAddr, permissions: MapPermission) {
+    let task = current_task().unwrap();
+    task.current_mmap(start_va, end_va, permissions);
+}
+/// current task unmmap
+pub fn current_task_unmap(start_va: VirtAddr, end_va: VirtAddr) {
+    let task = current_task().unwrap();
+    task.current_unmap(start_va, end_va);
+}
+
+/// current task increase syscall times
+pub fn current_task_increase_syscall_times(syscall_id: usize) {
+    let task = current_task().unwrap();
+    task.increase_syscall_times(syscall_id)
 }
 
 ///Get the mutable reference to trap context of current task
