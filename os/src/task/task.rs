@@ -1,9 +1,9 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -21,6 +21,12 @@ pub struct TaskControlBlock {
 
     /// Kernel stack corresponding to PID
     pub kernel_stack: KernelStack,
+
+    // /// Priority
+    // pub priority: u8,
+
+    // /// pass
+    // pub pass: u8,
 
     /// Mutable
     inner: UPSafeCell<TaskControlBlockInner>,
@@ -71,6 +77,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// Start time
+    pub start_time: usize,
+
+    /// Syscall times
+    pub syscall_times: [u32; MAX_SYSCALL_NUM]
 }
 
 impl TaskControlBlockInner {
@@ -103,6 +115,7 @@ impl TaskControlBlock {
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        debug!("child new ppn: [{}]", memory_set.page_table.token());
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
             .unwrap()
@@ -135,6 +148,8 @@ impl TaskControlBlock {
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    start_time: 0,
+                    syscall_times: [0; MAX_SYSCALL_NUM]
                 })
             },
         };
@@ -177,6 +192,7 @@ impl TaskControlBlock {
         // **** release current PCB
     }
 
+
     /// parent process fork the child process
     pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
         // ---- hold parent PCB lock
@@ -216,6 +232,8 @@ impl TaskControlBlock {
                     fd_table: new_fd_table,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    start_time: 0,
+                    syscall_times: [0; MAX_SYSCALL_NUM]
                 })
             },
         });
@@ -229,6 +247,21 @@ impl TaskControlBlock {
         task_control_block
         // **** release child PCB
         // ---- release parent PCB
+    }
+
+    /// fork but not copy address
+    pub fn fork_without_copy(self: &Arc<Self>, data: &[u8]) -> (Arc<TaskControlBlock>, usize) {
+        let tcb_parent = self;
+        let tcb_child = Arc::new(TaskControlBlock::new(data));
+        let tcb_child_pid = tcb_child.getpid();
+
+        tcb_child.inner_exclusive_access().parent = Some(Arc::downgrade(&tcb_parent));
+        tcb_parent.inner_exclusive_access().children.push(tcb_child.clone());
+
+        let trap_cx = tcb_child.inner_exclusive_access().get_trap_cx();
+        trap_cx.x[10] = 0;
+
+        (tcb_child, tcb_child_pid)    
     }
 
     /// get pid of process
@@ -260,6 +293,31 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// check current task mapped
+    pub fn is_mapped(&self, start_va: VirtAddr, end_va: VirtAddr, mapped: bool) -> bool {
+        let inner = self.inner.exclusive_access();
+        inner.memory_set.is_mapped(start_va, end_va, mapped)
+    }
+
+    /// current task mmap
+    pub fn current_mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permissions: MapPermission) {
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set.insert_framed_area(start_va, end_va, permissions);
+
+    }
+
+    /// current task unmmap
+    pub fn current_unmap(&self, start_va: VirtAddr, end_va: VirtAddr) {
+        let mut inner = self.inner.exclusive_access();
+        inner.memory_set.remove_framed_area(start_va, end_va);
+    }
+
+    /// current task increase syscall times
+    pub fn increase_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        inner.syscall_times[syscall_id] += 1;
     }
 }
 
