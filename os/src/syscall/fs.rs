@@ -1,5 +1,5 @@
 //! File and filesystem-related syscalls
-use crate::fs::{open_file, OpenFlags, Stat, StatMode};
+use crate::fs::{open_file, OpenFlags, Stat};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
@@ -81,33 +81,33 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
         "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    let token = current_user_token();
-    let task = current_task().unwrap();
-    let inner = task.inner_exclusive_access();
-    if _fd >= inner.fd_table.len() {
-        return  -1;
-    };
+    // let token = current_user_token();
+    // let task = current_task().unwrap();
+    // let inner = task.inner_exclusive_access();
+    // if _fd >= inner.fd_table.len() {
+    //     return  -1;
+    // };
 
-    let mut st = Stat::new();
-    st.dev = 0;
-    st.nlink = 1;
+    // let mut st = Stat::new();
+    // st.dev = 0;
+    // st.nlink = 1;
 
 
-    // st.ino = ?;
+    // // st.ino = ?;
     
 
-    if let Some(file) = &inner.fd_table[_fd] {
-    //     st.mode = StatMode::FILE;
-    //     // file.
+    // if let Some(file) = &inner.fd_table[_fd] {
+    // //     st.mode = StatMode::FILE;
+    // //     // file.
 
-    // //     let file = file.clone();
-    // //     if !file.readable() {
-    // //         return -1;
-    // //     };
-    // //     drop(inner);
-    };
+    // // //     let file = file.clone();
+    // // //     if !file.readable() {
+    // // //         return -1;
+    // // //     };
+    // // //     drop(inner);
+    // };
     
-
+    0
 }
 
 /// YOUR JOB: Implement linkat.
