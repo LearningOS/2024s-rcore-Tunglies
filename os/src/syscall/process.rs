@@ -31,7 +31,6 @@ pub struct TaskInfo {
 
 pub fn sys_exit(exit_code: i32) -> ! {
     trace!("kernel:pid[{}] sys_exit", current_task().unwrap().pid.0);
-    debug!("kernel:pid[{}] sys_exit", current_task().unwrap().pid.0);
     exit_current_and_run_next(exit_code);
     panic!("Unreachable in sys_exit!");
 }
@@ -44,13 +43,11 @@ pub fn sys_yield() -> isize {
 
 pub fn sys_getpid() -> isize {
     trace!("kernel: sys_getpid pid:{}", current_task().unwrap().pid.0);
-    debug!("kernel: sys_getpid pid:{}", current_task().unwrap().pid.0);
     current_task().unwrap().pid.0 as isize
 }
 
 pub fn sys_fork() -> isize {
     trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
-    debug!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
@@ -66,7 +63,6 @@ pub fn sys_fork() -> isize {
 
 pub fn sys_exec(path: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
-    debug!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
     let token = current_user_token();
     let path = translated_str(token, path);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
@@ -97,28 +93,28 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         // ---- release current PCB
     }
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
-        debug!("found pair");
-        debug!("[is zombie]: {}", p.inner_exclusive_access().is_zombie());
-        debug!("[pid]: {}", pid);
-        debug!("[pid getpid]: {}", p.getpid());
-        debug!("[pid == -1 || pid == p.getpid()]: {}", (pid == -1 || pid as usize == p.getpid()));
-        debug!("[{}]", p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid()));
-        debug!("");
+        //  debug!("found pair");
+        //  debug!("[is zombie]: {}", p.inner_exclusive_access().is_zombie());
+        //  debug!("[pid]: {}", pid);
+        //  debug!("[pid getpid]: {}", p.getpid());
+        //  debug!("[pid == -1 || pid == p.getpid()]: {}", (pid == -1 || pid as usize == p.getpid()));
+        //  debug!("[{}]", p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid()));
+        //  debug!("");
         // ++++ temporarily access child PCB exclusively
         p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
         // ++++ release child PCB
     });
     if let Some((idx, _)) = pair {
-        debug!("children length: {}", inner.children.len());
+        //  debug!("children length: {}", inner.children.len());
         let child = inner.children.remove(idx);
-        debug!("child strong count: {}", Arc::strong_count(&child));
+        //  debug!("child strong count: {}", Arc::strong_count(&child));
         // confirm that child will be deallocated after being removed from children list
         assert_eq!(Arc::strong_count(&child), 1);
         let found_pid = child.getpid();
-        debug!("child found pid: {}", found_pid);
+        //  debug!("child found pid: {}", found_pid);
         // ++++ temporarily access child PCB exclusively
         let exit_code = child.inner_exclusive_access().exit_code;
-        debug!("child pid: [{}], exit code: [{}]", found_pid, exit_code);
+        //  debug!("child pid: [{}], exit code: [{}]", found_pid, exit_code);
         // ++++ release child PCB
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
         found_pid as isize
@@ -254,27 +250,25 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// HINT: fork + exec =/= spawn
 pub fn sys_spawn(_path: *const u8) -> isize {
-    debug!("sys_spawn: {:?}", _path);
+    //  debug!("sys_spawn: {:?}", _path);
     trace!(
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
     
-    // let token = current_user_token();
-    // let path = translated_str(token, _path);
-
-    // let tcb_parent = current_task().unwrap();
-    // if let Some(data) = get_app_data_by_name(path.as_str()) {
-    //     let (tcb_child, tcb_child_pid) = tcb_parent.fork_without_copy(data);
-    //     add_task(tcb_child.clone());
-    //     tcb_child_pid as isize
-    // } else {
-    //     -1
-    // }
-    0
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    
+    let tcb_parent = current_task().unwrap();
+    if let Some(data) = open_file(&path, OpenFlags::RDONLY) {
+        let (tcb_child, tcb_child_pid) = tcb_parent.fork_without_copy(data.read_all().as_slice());
+        add_task(tcb_child.clone());
+        tcb_child_pid as isize
+    } else {
+        -1
+    }
 }
 
-// TODO YOUR JOB: Set task priority.
 pub fn sys_set_priority(_prio: isize) -> isize {
     trace!(
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
