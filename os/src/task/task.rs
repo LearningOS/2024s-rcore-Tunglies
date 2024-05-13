@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::fs::{File, Stdin, Stdout};
+use crate::fs::{File, Stat, Stdin, Stdout};
 use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
@@ -71,6 +71,7 @@ pub struct TaskControlBlockInner {
     /// It is set when active exit or execution error occurs
     pub exit_code: i32,
     pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub st_table: Vec<Option<Arc<Stat>>>,
 
     /// Heap bottom
     pub heap_bottom: usize,
@@ -103,6 +104,7 @@ impl TaskControlBlockInner {
             fd
         } else {
             self.fd_table.push(None);
+            self.st_table.push(None);
             self.fd_table.len() - 1
         }
     }
@@ -125,6 +127,7 @@ impl TaskControlBlock {
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
         // push a task context which goes to trap_return to the top of kernel stack
+        debug!("TCB new Stat 3 times");
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
@@ -145,6 +148,11 @@ impl TaskControlBlock {
                         Some(Arc::new(Stdout)),
                         // 2 -> stderr
                         Some(Arc::new(Stdout)),
+                    ],
+                    st_table: vec![
+                        Some(Arc::new(Stat::new())),
+                        Some(Arc::new(Stat::new())),
+                        Some(Arc::new(Stat::new())),
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
@@ -216,6 +224,15 @@ impl TaskControlBlock {
                 new_fd_table.push(None);
             }
         }
+        let mut new_st_table: Vec<Option<Arc<Stat>>> = Vec::new();
+        for st in parent_inner.st_table.iter() {
+            debug!("TCB st to new st table");
+            if let Some(_st) = st {
+                new_st_table.push(Some(_st.clone()));
+            } else {
+                new_st_table.push(None);
+            }
+        }
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
@@ -230,6 +247,7 @@ impl TaskControlBlock {
                     children: Vec::new(),
                     exit_code: 0,
                     fd_table: new_fd_table,
+                    st_table: new_st_table,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
                     start_time: 0,

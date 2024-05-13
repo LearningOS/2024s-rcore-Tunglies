@@ -45,6 +45,17 @@ impl Stat {
             pad: [0; 7]
         }
     }
+    /// From args
+    pub fn from_args(ino: u64, mode: StatMode, nlink: u32) -> Self {
+        debug!("Stat from args: {} -> {:?}", ino, mode);
+        Stat {
+            dev: 0,
+            ino: ino,
+            mode: mode,
+            nlink: nlink,
+            pad: [0; 7],
+        }
+    }
 }
 
 bitflags! {
