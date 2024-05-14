@@ -6,6 +6,7 @@ use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
+use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -108,6 +109,20 @@ impl TaskControlBlockInner {
             self.fd_table.len() - 1
         }
     }
+    pub fn find_linked_index(&self, path: String) -> Option<usize> {
+        self.st_table
+            .iter()
+            .enumerate()
+            .find_map(|(i, e)| {
+                if let Some(stat) = e {
+                    if stat.links.iter().any(|link| link.as_ref() == Some(&path)) {
+                        return Some(i);
+                    }
+                }
+                None
+            })
+    }
+    
 }
 
 impl TaskControlBlock {
@@ -337,6 +352,7 @@ impl TaskControlBlock {
         let mut inner = self.inner.exclusive_access();
         inner.syscall_times[syscall_id] += 1;
     }
+    
 }
 
 #[derive(Copy, Clone, PartialEq)]

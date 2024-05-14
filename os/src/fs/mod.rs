@@ -29,6 +29,8 @@ pub struct Stat {
     pub mode: StatMode,
     /// number of hard links
     pub nlink: u32,
+    /// path links
+    pub links: Vec<Option<String>>,
     /// unused pad
     pad: [u64; 7],
 }
@@ -42,19 +44,58 @@ impl Stat {
             ino: 0,
             mode: StatMode::NULL,
             nlink: 0,
+            links: Vec::new(),
             pad: [0; 7]
         }
     }
     /// From args
-    pub fn from_args(ino: u64, mode: StatMode, nlink: u32) -> Self {
+    pub fn from_args(ino: u64, mode: StatMode, nlink: u32, links: Vec<Option<String>>) -> Self {
         debug!("Stat from args: {} -> {:?}", ino, mode);
         Stat {
             dev: 0,
             ino: ino,
             mode: mode,
             nlink: nlink,
+            links: links,
             pad: [0; 7],
         }
+    }
+    /// link
+    pub fn link(&mut self, path: String) {
+        self.nlink += 1;
+        self.links.push(Some(path));
+    }
+    /// unlink
+    pub fn unlikn(&mut self, path: String) {
+        let index: Option<usize> = self.links.iter().enumerate().find_map(|(i, l)| {
+            if let Some(_path) = l {
+                if _path.eq(&path) {
+                    return Some(i);
+                }
+            }
+            None
+        });
+
+        if index.is_none() {
+            return;
+        }
+
+        self.nlink -= 1;
+        self.links.remove(index.unwrap());
+    }
+    /// exist link
+    pub fn exist_link(&self, path: String) -> bool {
+        if self.nlink == 0 {
+            return false;
+        };
+        for link in self.links.clone() {
+            if let Some(_path) = link {
+                if _path == path {
+                    return true;
+                };
+            };
+        }
+        return false;
     }
 }
 
@@ -71,5 +112,6 @@ bitflags! {
     }
 }
 
+use alloc::{string::String, vec::Vec};
 pub use inode::{list_apps, open_file, OSInode, OpenFlags};
 pub use stdio::{Stdin, Stdout};
