@@ -132,7 +132,6 @@ impl TaskControlBlock {
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-        //  debug!("child new ppn: [{}]", memory_set.page_table.token());
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
             .unwrap()
@@ -142,7 +141,6 @@ impl TaskControlBlock {
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
         // push a task context which goes to trap_return to the top of kernel stack
-        debug!("TCB new Stat 3 times");
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
@@ -241,7 +239,6 @@ impl TaskControlBlock {
         }
         let mut new_st_table: Vec<Option<Arc<Stat>>> = Vec::new();
         for st in parent_inner.st_table.iter() {
-            debug!("TCB st to new st table");
             if let Some(_st) = st {
                 new_st_table.push(Some(_st.clone()));
             } else {

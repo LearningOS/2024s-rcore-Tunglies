@@ -72,8 +72,6 @@ pub fn exit_current_and_run_next(exit_code: i32) {
         panic!("All applications completed!");
     }
 
-    //  debug!("child exit from pid: {}", task.getpid());
-
     // **** access current TCB exclusively
     let mut inner = task.inner_exclusive_access();
     // Change status to Zombie

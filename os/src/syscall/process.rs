@@ -93,28 +93,17 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         // ---- release current PCB
     }
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
-        //  debug!("found pair");
-        //  debug!("[is zombie]: {}", p.inner_exclusive_access().is_zombie());
-        //  debug!("[pid]: {}", pid);
-        //  debug!("[pid getpid]: {}", p.getpid());
-        //  debug!("[pid == -1 || pid == p.getpid()]: {}", (pid == -1 || pid as usize == p.getpid()));
-        //  debug!("[{}]", p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid()));
-        //  debug!("");
         // ++++ temporarily access child PCB exclusively
         p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
         // ++++ release child PCB
     });
     if let Some((idx, _)) = pair {
-        //  debug!("children length: {}", inner.children.len());
         let child = inner.children.remove(idx);
-        //  debug!("child strong count: {}", Arc::strong_count(&child));
         // confirm that child will be deallocated after being removed from children list
         assert_eq!(Arc::strong_count(&child), 1);
         let found_pid = child.getpid();
-        //  debug!("child found pid: {}", found_pid);
         // ++++ temporarily access child PCB exclusively
         let exit_code = child.inner_exclusive_access().exit_code;
-        //  debug!("child pid: [{}], exit code: [{}]", found_pid, exit_code);
         // ++++ release child PCB
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
         found_pid as isize
@@ -250,7 +239,6 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// HINT: fork + exec =/= spawn
 pub fn sys_spawn(_path: *const u8) -> isize {
-    //  debug!("sys_spawn: {:?}", _path);
     trace!(
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0

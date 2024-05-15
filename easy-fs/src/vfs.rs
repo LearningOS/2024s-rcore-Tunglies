@@ -29,6 +29,10 @@ impl Inode {
             block_device,
         }
     }
+    /// get inode id
+    pub fn get_block_id(&self) -> usize {
+        return self.block_id;
+    }
     /// Call a function over a disk inode to read it
     fn read_disk_inode<V>(&self, f: impl FnOnce(&DiskInode) -> V) -> V {
         get_block_cache(self.block_id, Arc::clone(&self.block_device))

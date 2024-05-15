@@ -55,23 +55,18 @@ pub fn sys_open(path: *const u8, flags: u32) -> isize {
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = translated_str(token, path);
-    if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
+    if let Some(inode) = open_file(&path, OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_exclusive_access();
         let fd = inner.alloc_fd();
         inner.fd_table[fd] = Some(inode);
 
-        debug!("sys open | exsited st | {:?}", inner.st_table[fd].is_some());
-
         if inner.st_table[fd].is_none() {
             let st = Stat::from_args(0, StatMode::FILE, 1, vec![Some(path.clone())]);
-            debug!("sys_open | not existed| nlink: {:?}, links: {:?}", st.nlink, st.links.clone());
             inner.st_table[fd] = Some(Arc::new(st));
             return fd as isize;            
         } else {
             let st = inner.st_table[fd].clone().unwrap();
-            debug!("sys open | existed | nlink: {}, links: {:?}", st.nlink, st.links.clone());
             if !st.exist_link(path.clone()) {
-                debug!("sys open | not exist path: {}", path.clone());
                 return -1;
             }
             return fd as isize;
@@ -101,7 +96,6 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
         "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    debug!("sys fstat");
     let token = current_user_token();
     let ptr = _st as *const u8;
     let len = core::mem::size_of::<Stat>();
@@ -109,14 +103,11 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
 
     let binding = current_task().unwrap();
     let inner = binding.inner_exclusive_access();
-    debug!("st table len: {}, fd table len: {}", inner.st_table.len(), inner.fd_table.len());
     if _fd > inner.st_table.len() {
         return -1;
     }
-    debug!("try fetch from st table");
     let _st = inner.st_table[_fd].clone().unwrap();
     let st = Stat::from_args(_st.ino, _st.mode, _st.nlink, _st.links.clone());
-    debug!("ino -> {:?},  mode -> {:?}, nlink -> {:?}", st.ino, st.mode, st.nlink);
 
     let mut st_ptr = &st as *const _ as *const u8;
     unsafe {
@@ -134,26 +125,23 @@ pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
         "kernel:pid[{}] sys_linkat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    let token = current_user_token();
-    let binding = current_task().unwrap();
-    let mut inner = binding.inner_exclusive_access();
+    // let token = current_user_token();
+    // let binding = current_task().unwrap();
+    // let mut inner = binding.inner_exclusive_access();
 
-    let old_path = translated_str(token, _old_name);
-    let new_path = translated_str(token, _new_name);
+    // let old_path = translated_str(token, _old_name);
+    // let new_path = translated_str(token, _new_name);
 
-    if let Some(index) = inner.find_linked_index(old_path.clone()) {
-        let _stat = inner.st_table[index].clone().unwrap();
-        let mut stat = Stat::from_args(_stat.ino, _stat.mode, _stat.nlink, _stat.links.clone());
-        stat.link(new_path);
-        debug!("after link nlink: {:?}", stat.nlink);
-        debug!("after link links: {:?}", stat.links);
-        inner.st_table[index] = Some(Arc::new(stat));
-        return 0;
-    } else {
-        return -1;
-    }
-    
-    
+    // if let Some(index) = inner.find_linked_index(old_path.clone()) {
+    //     let _stat = inner.st_table[index].clone().unwrap();
+    //     let mut stat = Stat::from_args(_stat.ino, _stat.mode, _stat.nlink, _stat.links.clone());
+    //     stat.link(new_path);
+    //     inner.st_table[index] = Some(Arc::new(stat));
+    //     return 0;
+    // } else {
+    //     return -1;
+    // }
+    -1
 }
 
 /// YOUR JOB: Implement unlinkat.
@@ -162,20 +150,19 @@ pub fn sys_unlinkat(_name: *const u8) -> isize {
         "kernel:pid[{}] sys_unlinkat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    let token = current_user_token();
-    let binding = current_task().unwrap();
-    let mut inner = binding.inner_exclusive_access();
+    // let token = current_user_token();
+    // let binding = current_task().unwrap();
+    // let mut inner = binding.inner_exclusive_access();
     
-    let path = translated_str(token, _name);
-    if let Some(index) = inner.find_linked_index(path.clone()) {
-        let _stat = inner.st_table[index].clone().unwrap();
-        let mut stat = Stat::from_args(_stat.ino, _stat.mode, _stat.nlink, _stat.links.clone());
-        stat.unlikn(path);
-        debug!("after unlink nlink: {:?}", stat.nlink);
-        debug!("after unlink links: {:?}", stat.links);
-        inner.st_table[index] = Some(Arc::new(stat));
-        return 0;
-    } else {
-        return -1;
-    }
+    // let path = translated_str(token, _name);
+    // if let Some(index) = inner.find_linked_index(path.clone()) {
+    //     let _stat = inner.st_table[index].clone().unwrap();
+    //     let mut stat = Stat::from_args(_stat.ino, _stat.mode, _stat.nlink, _stat.links.clone());
+    //     stat.unlikn(path);
+    //     inner.st_table[index] = Some(Arc::new(stat));
+    //     return 0;
+    // } else {
+    //     return -1;
+    // }
+    -1
 }

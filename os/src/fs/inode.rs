@@ -8,6 +8,7 @@ use super::File;
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
+use _core::cell::RefMut;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -26,6 +27,13 @@ pub struct OSInode {
 pub struct OSInodeInner {
     offset: usize,
     inode: Arc<Inode>,
+}
+
+impl OSInodeInner {
+    /// get inode
+    pub fn get_inode(&self) -> Arc<Inode> {
+        self.inode.clone()
+    }
 }
 
 impl OSInode {
@@ -51,6 +59,10 @@ impl OSInode {
             v.extend_from_slice(&buffer[..len]);
         }
         v
+    }
+    /// OS inode inner
+    pub fn inner_exclusive_access(&self) -> RefMut<'_, OSInodeInner> {
+        self.inner.exclusive_access()
     }
 }
 
@@ -125,6 +137,9 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
 }
 
 impl File for OSInode {
+    fn inner_exclusive_access(&self) -> Option<RefMut<'_, OSInodeInner>> {
+        Some(self.inner_exclusive_access())    
+    }
     fn readable(&self) -> bool {
         self.readable
     }
