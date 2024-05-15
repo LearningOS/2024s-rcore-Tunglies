@@ -9,7 +9,7 @@ use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use _core::cell::RefMut;
-use alloc::sync::Arc;
+use alloc::{borrow::ToOwned, sync::Arc};
 use alloc::vec::Vec;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
@@ -32,7 +32,11 @@ pub struct OSInodeInner {
 impl OSInodeInner {
     /// get inode
     pub fn get_inode(&self) -> Arc<Inode> {
-        self.inode.clone()
+        Arc::clone(&self.inode)
+    }
+    /// update inode
+    pub fn udate_inode(&mut self, inode: Arc<Inode>) {
+        self.inode = inode.to_owned()
     }
 }
 
@@ -42,7 +46,12 @@ impl OSInode {
         Self {
             readable,
             writable,
-            inner: unsafe { UPSafeCell::new(OSInodeInner { offset: 0, inode }) },
+            inner: unsafe {
+                UPSafeCell::new(OSInodeInner {
+                    offset: 0,
+                    inode: inode,
+                })
+            },
         }
     }
     /// read all data from the inode
@@ -138,7 +147,7 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
 
 impl File for OSInode {
     fn inner_exclusive_access(&self) -> Option<RefMut<'_, OSInodeInner>> {
-        Some(self.inner_exclusive_access())    
+        Some(self.inner_exclusive_access())
     }
     fn readable(&self) -> bool {
         self.readable
