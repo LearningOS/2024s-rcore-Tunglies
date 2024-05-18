@@ -8,8 +8,7 @@ use super::File;
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
-use _core::cell::RefMut;
-use alloc::{borrow::ToOwned, sync::Arc};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
@@ -22,6 +21,7 @@ pub struct OSInode {
     readable: bool,
     writable: bool,
     inner: UPSafeCell<OSInodeInner>,
+    nlink: u32
 }
 /// The OS inode inner in 'UPSafeCell'
 pub struct OSInodeInner {
@@ -30,14 +30,6 @@ pub struct OSInodeInner {
 }
 
 impl OSInodeInner {
-    /// get inode
-    pub fn get_inode(&self) -> Arc<Inode> {
-        Arc::clone(&self.inode)
-    }
-    /// update inode
-    pub fn udate_inode(&mut self, inode: Arc<Inode>) {
-        self.inode = inode.to_owned()
-    }
 }
 
 impl OSInode {
@@ -52,6 +44,7 @@ impl OSInode {
                     inode: inode,
                 })
             },
+            nlink: 1
         }
     }
     /// read all data from the inode
@@ -69,9 +62,14 @@ impl OSInode {
         }
         v
     }
-    /// OS inode inner
-    pub fn inner_exclusive_access(&self) -> RefMut<'_, OSInodeInner> {
-        self.inner.exclusive_access()
+    /// get nlink
+    pub fn get_nlink(&self) -> u32 {
+        // let inner = self.inner.exclusive_access();
+        // // let nlink = inner.inode.get_nlink();
+        // let nlink = inner.inode.nlink;
+        // debug!("get nlink: {}", nlink);
+        // nlink as u32
+        self.nlink
     }
 }
 
@@ -126,16 +124,19 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
         if let Some(inode) = ROOT_INODE.find(name) {
+            debug!("Clean: {}", name);
             // clear size
             inode.clear();
             Some(Arc::new(OSInode::new(readable, writable, inode)))
         } else {
+            debug!("Create: {}", name);
             // create file
             ROOT_INODE
-                .create(name)
-                .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
+            .create(name)
+            .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
         }
     } else {
+        debug!("Exist: {}", name);
         ROOT_INODE.find(name).map(|inode| {
             if flags.contains(OpenFlags::TRUNC) {
                 inode.clear();
@@ -145,10 +146,14 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// Link a file
+pub fn link_file(old_name: &str, new_name: &str) -> Option<()> {
+    let ret = ROOT_INODE.link(old_name, new_name);
+    debug!("after link file: {:?}", ROOT_INODE.ls());
+    ret
+}
+
 impl File for OSInode {
-    fn inner_exclusive_access(&self) -> Option<RefMut<'_, OSInodeInner>> {
-        Some(self.inner_exclusive_access())
-    }
     fn readable(&self) -> bool {
         self.readable
     }
@@ -178,5 +183,9 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn get_nlink(&self) -> u32 {
+        let inner = self.inner.exclusive_access();
+        inner.inode.get_nlink()
     }
 }

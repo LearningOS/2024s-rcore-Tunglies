@@ -1,7 +1,4 @@
 //!Stdin & Stdout
-use core::cell::RefMut;
-
-use super::inode::OSInodeInner;
 use super::File;
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
@@ -42,8 +39,8 @@ impl File for Stdin {
     fn write(&self, _user_buf: UserBuffer) -> usize {
         panic!("Cannot write to stdin!");
     }
-    fn inner_exclusive_access(&self) -> Option<RefMut<'_, OSInodeInner>> {
-        None
+    fn get_nlink(&self) -> u32 {
+        233
     }
 }
 
@@ -63,7 +60,7 @@ impl File for Stdout {
         }
         user_buf.len()
     }
-    fn inner_exclusive_access(&self) -> Option<RefMut<'_, OSInodeInner>> {
-        None
+    fn get_nlink(&self) -> u32 {
+        996
     }
 }

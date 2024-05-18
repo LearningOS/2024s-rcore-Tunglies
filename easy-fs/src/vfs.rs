@@ -5,6 +5,7 @@ use super::{
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use log::debug;
 use spin::{Mutex, MutexGuard};
 /// Virtual filesystem layer over easy-fs
 pub struct Inode {
@@ -12,6 +13,8 @@ pub struct Inode {
     block_offset: usize,
     fs: Arc<Mutex<EasyFileSystem>>,
     block_device: Arc<dyn BlockDevice>,
+    /// nlink
+    pub nlink: usize,
 }
 
 impl Inode {
@@ -21,12 +24,14 @@ impl Inode {
         block_offset: usize,
         fs: Arc<Mutex<EasyFileSystem>>,
         block_device: Arc<dyn BlockDevice>,
+        nlink: usize,
     ) -> Self {
         Self {
             block_id: block_id as usize,
             block_offset,
             fs,
             block_device,
+            nlink
         }
     }
     /// get inode id
@@ -73,9 +78,48 @@ impl Inode {
                     block_offset,
                     self.fs.clone(),
                     self.block_device.clone(),
+                    self.nlink
                 ))
             })
         })
+    }
+    /// Get nlink
+    pub fn get_nlink(&self) -> u32 {
+        self.nlink as u32
+    }
+    /// Link a file
+    pub fn link(&self, oldname: &str, newname: &str) -> Option<()> {
+        let mut fs = self.fs.lock();
+        let old_inode_id =
+            self.read_disk_inode(|root_inode| self.find_inode_id(oldname, root_inode));
+        if old_inode_id.is_none() {
+            return None;
+        }
+    
+        let (block_id, block_offset) = fs.get_disk_inode_pos(old_inode_id.unwrap());
+    
+        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(block_offset, |n: &mut DiskInode| {
+                n.nlink += 1;
+                debug!("Inode\tBlockId: {}, BlockOffset: {}, DisInodeNlink: {}", block_id, block_offset, n.nlink);
+            });
+        
+        self.modify_disk_inode(|root_inode| {
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            self.increase_size(new_size as u32, root_inode, &mut fs);
+            let dirent = DirEntry::new(newname, old_inode_id.unwrap());
+            root_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+    
+        // Since we may have writed the cached block, we need to flush the cache.
+        block_cache_sync_all();
+        Some(())
     }
     /// Increase the size of a disk inode
     fn increase_size(
@@ -122,6 +166,8 @@ impl Inode {
             let new_size = (file_count + 1) * DIRENT_SZ;
             // increase size
             self.increase_size(new_size as u32, root_inode, &mut fs);
+            // inccrease nlink
+            debug!("root_inode nlink: {}", root_inode.nlink);
             // write dirent
             let dirent = DirEntry::new(name, new_inode_id);
             root_inode.write_at(
@@ -139,6 +185,7 @@ impl Inode {
             block_offset,
             self.fs.clone(),
             self.block_device.clone(),
+            1
         )))
         // release efs lock automatically by compiler
     }

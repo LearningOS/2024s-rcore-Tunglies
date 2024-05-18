@@ -3,8 +3,6 @@
 mod inode;
 mod stdio;
 
-use core::cell::RefMut;
-
 use crate::mm::UserBuffer;
 
 /// trait File for all file types
@@ -17,8 +15,8 @@ pub trait File: Send + Sync {
     fn read(&self, buf: UserBuffer) -> usize;
     /// write to the file from buf, return the number of bytes written
     fn write(&self, buf: UserBuffer) -> usize;
-    /// get block id
-    fn inner_exclusive_access(&self) -> Option<RefMut<'_, OSInodeInner>> ;
+    /// get nlink
+    fn get_nlink(&self) -> u32;
 }
 
 /// The stat of a inode
@@ -49,6 +47,16 @@ impl Stat {
             pad: [0; 7]
         }
     }
+    /// init as
+    pub fn init(mode: StatMode, nlink: u32) -> Self {
+        Stat {
+            dev: 0,
+            ino: 0,
+            mode: mode,
+            nlink: nlink,
+            pad: [0; 7]
+        }
+    }
 }
 
 bitflags! {
@@ -64,7 +72,5 @@ bitflags! {
     }
 }
 
-pub use inode::{list_apps, open_file, OSInode, OpenFlags};
+pub use inode::{list_apps, open_file, link_file, OSInode, OpenFlags};
 pub use stdio::{Stdin, Stdout};
-
-use self::inode::OSInodeInner;
