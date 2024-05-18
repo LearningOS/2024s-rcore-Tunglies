@@ -1,7 +1,7 @@
 //! File and filesystem-related syscalls
 
 
-use crate::fs::{link_file, open_file, OpenFlags, Stat, StatMode};
+use crate::fs::{link_file, open_file, unlikn_file, OpenFlags, Stat, StatMode};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
@@ -56,7 +56,6 @@ pub fn sys_open(path: *const u8, flags: u32) -> isize {
     if let Some(inode) = open_file(&path.clone(), OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_exclusive_access();
         let fd = inner.alloc_fd();
-        debug!("sys_open\tname: {}, fd:{}, nlink: {}", path, fd, inode.get_nlink());
         inner.fd_table[fd] = Some(inode);
         debug!("sys_open\tfd table len: {}", inner.fd_table.len());
         return fd as isize;
@@ -96,7 +95,7 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
     }
 
     debug!("sys_fstat\tentry fd: {}", _fd);
-    let nlink = inner.fd_table[_fd].clone().unwrap().get_nlink();
+    let nlink = inner.fd_table[_fd].as_ref().unwrap().get_nlink();
     debug!("get nlink done: {}", nlink);
 
     
@@ -139,5 +138,12 @@ pub fn sys_unlinkat(_name: *const u8) -> isize {
         "kernel:pid[{}] sys_unlinkat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let name = translated_str(token, _name);
+    if let Some(_) = unlikn_file(name.as_str()) {
+        return 0;
+    } else {
+        return -1;
+    }
+
 }

@@ -21,7 +21,6 @@ pub struct OSInode {
     readable: bool,
     writable: bool,
     inner: UPSafeCell<OSInodeInner>,
-    nlink: u32
 }
 /// The OS inode inner in 'UPSafeCell'
 pub struct OSInodeInner {
@@ -44,7 +43,6 @@ impl OSInode {
                     inode: inode,
                 })
             },
-            nlink: 1
         }
     }
     /// read all data from the inode
@@ -61,15 +59,6 @@ impl OSInode {
             v.extend_from_slice(&buffer[..len]);
         }
         v
-    }
-    /// get nlink
-    pub fn get_nlink(&self) -> u32 {
-        // let inner = self.inner.exclusive_access();
-        // // let nlink = inner.inode.get_nlink();
-        // let nlink = inner.inode.nlink;
-        // debug!("get nlink: {}", nlink);
-        // nlink as u32
-        self.nlink
     }
 }
 
@@ -148,9 +137,12 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
 
 /// Link a file
 pub fn link_file(old_name: &str, new_name: &str) -> Option<()> {
-    let ret = ROOT_INODE.link(old_name, new_name);
-    debug!("after link file: {:?}", ROOT_INODE.ls());
-    ret
+    ROOT_INODE.link(old_name, new_name)
+}
+
+/// Unlink a file
+pub fn unlikn_file(name: &str) -> Option<()> {
+    ROOT_INODE.unlink(name)
 }
 
 impl File for OSInode {
