@@ -99,38 +99,36 @@ impl Inode {
     pub fn link(&self, oldname: &str, newname: &str) -> Option<()> {
         debug!("Inode::link\t{} -> {}", oldname, newname);
         let mut fs = self.fs.lock();
-        let old_inode_id =
-            self.read_disk_inode(|root_inode| self.find_inode_id(oldname, root_inode));
+    
+        let old_inode_id = self.read_disk_inode(|root_inode| self.find_inode_id(oldname, root_inode));
         if old_inode_id.is_none() {
             return None;
         }
-        
-        let (block_id, block_offset) = fs.get_disk_inode_pos(old_inode_id.unwrap());
-        debug!("Inode::link\tBlockId: {}, BlockOffset:{}", block_id, block_offset);
+    
+        let inode_id = old_inode_id.unwrap();
+        let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
+        debug!("Inode::link\tBlockId: {}, BlockOffset: {}", block_id, block_offset);
     
         get_block_cache(block_id as usize, Arc::clone(&self.block_device))
             .lock()
-            .modify(block_offset, |n: &mut DiskInode| {
-                n.nlink += 1;
-                debug!("Inode::link\tBlockId: {}, BlockOffset: {}, DisInodeNlink: {}", block_id, block_offset, n.nlink);
+            .modify(block_offset, |inode: &mut DiskInode| {
+                inode.nlink += 1;
+                debug!("Inode::link\tBlockId: {}, BlockOffset: {}, DiskInodeNlink: {}", block_id, block_offset, inode.nlink);
             });
-        
+    
         self.modify_disk_inode(|root_inode| {
             let file_count = (root_inode.size as usize) / DIRENT_SZ;
             let new_size = (file_count + 1) * DIRENT_SZ;
             self.increase_size(new_size as u32, root_inode, &mut fs);
-            let dirent = DirEntry::new(newname, old_inode_id.unwrap());
-            root_inode.write_at(
-                file_count * DIRENT_SZ,
-                dirent.as_bytes(),
-                &self.block_device,
-            );
+    
+            let dirent = DirEntry::new(newname, inode_id);
+            root_inode.write_at(file_count * DIRENT_SZ, dirent.as_bytes(), &self.block_device);
         });
     
-        // Since we may have writed the cached block, we need to flush the cache.
         block_cache_sync_all();
         Some(())
     }
+    
     /// Unlink a file
     pub fn unlink(&self, name: &str) -> Option<()> {
         let mut fs = self.fs.lock();
