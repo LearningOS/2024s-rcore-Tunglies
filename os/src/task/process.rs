@@ -7,7 +7,7 @@ use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
-use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
+use crate::sync::{Condvar, Mutex, MutexSpin, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -49,6 +49,14 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// check dead lock
+    pub detect_dead_lock: Arc<MutexSpin>,
+    // Available array
+    pub available: Vec<Option<usize>>,
+    /// Work array
+    pub allocation: Vec<Arc<Vec<usize>>>,
+    /// Finish array
+    pub need: Vec<Vec<usize>>,
 }
 
 impl ProcessControlBlockInner {
@@ -81,6 +89,17 @@ impl ProcessControlBlockInner {
     /// get a task with tid in this process
     pub fn get_task(&self, tid: usize) -> Arc<TaskControlBlock> {
         self.tasks[tid].as_ref().unwrap().clone()
+    }
+    /// get a task its pid in this proccess
+    pub fn get_tid(&self, tid: usize) -> usize {
+        self.tasks[tid]
+            .as_ref()
+            .unwrap()
+            .inner_exclusive_access()
+            .res
+            .as_ref()
+            .unwrap()
+            .tid
     }
 }
 
@@ -119,6 +138,10 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    detect_dead_lock: Arc::new(MutexSpin::new()),
+                    available: Vec::new(),
+                    allocation: Vec::new(),
+                    need: Vec::new(),
                 })
             },
         });
@@ -245,6 +268,10 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    detect_dead_lock: Arc::new(MutexSpin::new()),
+                    available: Vec::new(),
+                    allocation: Vec::new(),
+                    need: Vec::new(),
                 })
             },
         });

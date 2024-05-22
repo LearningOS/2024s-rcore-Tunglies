@@ -50,6 +50,7 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
         trap_handler as usize,
     );
     (*new_task_trap_cx).x[10] = arg;
+    debug!("sys_thread_create\tnew task tid: {}", new_task_tid);
     new_task_tid as isize
 }
 /// get current thread id syscall

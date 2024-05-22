@@ -26,6 +26,20 @@ impl MutexSpin {
             locked: unsafe { UPSafeCell::new(false) },
         }
     }
+
+    /// locked?
+    pub fn is_locked(&self) -> bool {
+        self.locked.exclusive_access().clone()
+    }
+
+    /// as locked
+    pub fn new_locked() -> Self {
+        Self {
+            locked: unsafe {
+                UPSafeCell::new(true)
+            }
+        }
+    }
 }
 
 impl Mutex for MutexSpin {
@@ -50,6 +64,7 @@ impl Mutex for MutexSpin {
         let mut locked = self.locked.exclusive_access();
         *locked = false;
     }
+
 }
 
 /// Blocking Mutex struct

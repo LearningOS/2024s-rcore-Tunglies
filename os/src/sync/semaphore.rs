@@ -52,4 +52,12 @@ impl Semaphore {
             block_current_and_run_next();
         }
     }
+
+    /// get count
+    pub fn get_count(&self) -> isize {
+        let inner = self.inner.exclusive_access();
+        let count = inner.count;
+        drop(inner);
+        count
+    }
 }
